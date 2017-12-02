@@ -64,7 +64,6 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     _previousLayoutBounds = CGRectZero;
     _currentPageIndex = 0;
     _previousPageIndex = NSUIntegerMax;
-    _currentVideoIndex = NSUIntegerMax;
     _displayActionButton = YES;
     _displayNavArrows = NO;
     _zoomPhotosToFill = YES;
@@ -147,7 +146,7 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     if (!_enableGrid) _startOnGrid = NO;
     
     // View
-    self.view.backgroundColor = [UIColor blackColor];
+    self.view.backgroundColor = ( _backgroundColor == nil ) ? [UIColor blackColor] : _backgroundColor;
     self.view.clipsToBounds = YES;
     
     // Setup paging scrolling view
@@ -158,16 +157,16 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     _pagingScrollView.delegate = self;
     _pagingScrollView.showsHorizontalScrollIndicator = NO;
     _pagingScrollView.showsVerticalScrollIndicator = NO;
-    _pagingScrollView.backgroundColor = [UIColor blackColor];
+    _pagingScrollView.backgroundColor = ( _backgroundColor == nil ) ? [UIColor blackColor] : _backgroundColor;;
     _pagingScrollView.contentSize = [self contentSizeForPagingScrollView];
     [self.view addSubview:_pagingScrollView];
     
     // Toolbar
     _toolbar = [[UIToolbar alloc] initWithFrame:[self frameForToolbarAtOrientation:self.interfaceOrientation]];
-    _toolbar.tintColor = [UIColor whiteColor];
-    _toolbar.barTintColor = nil;
-    [_toolbar setBackgroundImage:nil forToolbarPosition:UIToolbarPositionAny barMetrics:UIBarMetricsDefault];
-    [_toolbar setBackgroundImage:nil forToolbarPosition:UIToolbarPositionAny barMetrics:UIBarMetricsLandscapePhone];
+    _toolbar.tintColor = [UIColor redColor];
+    _toolbar.barTintColor = _bottomBarColor;
+    //    [_toolbar setBackgroundImage:_toolbarBackgroundImage forToolbarPosition:UIToolbarPositionAny barMetrics:UIBarMetricsDefault];
+    //    [_toolbar setBackgroundImage:_toolbarBackgroundImage forToolbarPosition:UIToolbarPositionAny barMetrics:UIBarMetricsLandscapePhone];
     _toolbar.barStyle = UIBarStyleBlackTranslucent;
     _toolbar.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
     
@@ -348,7 +347,7 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     // Set style
     if (!_leaveStatusBarAlone && UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
         _previousStatusBarStyle = [[UIApplication sharedApplication] statusBarStyle];
-        [[UIApplication sharedApplication] setStatusBarStyle:UIStatusBarStyleLightContent animated:animated];
+        //   [[UIApplication sharedApplication] setStatusBarStyle:UIStatusBarStyleLightContent animated:animated];
     }
     
     // Navigation bar appearance
@@ -372,9 +371,6 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     if (_currentPageIndex != _pageIndexBeforeRotation) {
         [self jumpToPageAtIndex:_pageIndexBeforeRotation animated:NO];
     }
-    
-    // Layout
-    [self.view setNeedsLayout];
     
 }
 
@@ -401,14 +397,12 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     // Detect if rotation occurs while we're presenting a modal
     _pageIndexBeforeRotation = _currentPageIndex;
     
-    // Check that we're disappearing for good
-    // self.isMovingFromParentViewController just doesn't work, ever. Or self.isBeingDismissed
-    if ((_doneButton && self.navigationController.isBeingDismissed) ||
-        ([self.navigationController.viewControllers objectAtIndex:0] != self && ![self.navigationController.viewControllers containsObject:self])) {
+    // Check that we're being popped for good
+    if ([self.navigationController.viewControllers objectAtIndex:0] != self &&
+        ![self.navigationController.viewControllers containsObject:self]) {
         
         // State
         _viewIsActive = NO;
-        [self clearCurrentVideo]; // Clear current playing video
         
         // Bar state / appearance
         [self restorePreviousNavBarAppearance:animated];
@@ -445,13 +439,18 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
 - (void)setNavBarAppearance:(BOOL)animated {
     [self.navigationController setNavigationBarHidden:NO animated:animated];
     UINavigationBar *navBar = self.navigationController.navigationBar;
-    navBar.tintColor = [UIColor whiteColor];
-    navBar.barTintColor = nil;
+    navBar.tintColor = _navigationBarBackButtonTintColor;
+    navBar.barTintColor = _navigationBarTintColor;
+    if (_navigationBarTitleColor){
+        navBar.titleTextAttributes = @{NSForegroundColorAttributeName: _navigationBarTitleColor};
+    }
+    
+    
     navBar.shadowImage = nil;
     navBar.translucent = YES;
-    navBar.barStyle = UIBarStyleBlackTranslucent;
-    [navBar setBackgroundImage:nil forBarMetrics:UIBarMetricsDefault];
-    [navBar setBackgroundImage:nil forBarMetrics:UIBarMetricsLandscapePhone];
+    //navBar.barStyle = UIBarStyleBlackTranslucent;
+    [self.navigationController.navigationBar setBackgroundImage:_navigationBarBackgroundImage forBarMetrics:UIBarMetricsDefault];
+    [self.navigationController.navigationBar setBackgroundImage:_navigationBarBackgroundImage forBarMetrics:UIBarMetricsLandscapePhone];
 }
 
 - (void)storePreviousNavBarAppearance {
@@ -556,7 +555,7 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     return YES;
 }
 
-- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+- (NSUInteger)supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskAll;
 }
 
@@ -809,7 +808,8 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
             // Add new page
             MWZoomingScrollView *page = [self dequeueRecycledPage];
             if (!page) {
-                page = [[MWZoomingScrollView alloc] initWithPhotoBrowser:self];
+                page = [[MWZoomingScrollView alloc] initWithPhotoBrowser:self andBackgroundColor:_backgroundColor];
+                
             }
             [_visiblePages addObject:page];
             [self configurePage:page forIndex:index];
@@ -923,7 +923,7 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     }
     
     // Handle video on page change
-    if (!_rotating && index != _currentVideoIndex) {
+    if (!_rotating || index != _currentVideoIndex) {
         [self clearCurrentVideo];
     }
     
@@ -1173,19 +1173,7 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
 }
 
 - (void)playButtonTapped:(id)sender {
-    // Ignore if we're already playing a video
-    if (_currentVideoIndex != NSUIntegerMax) {
-        return;
-    }
-    NSUInteger index = [self indexForPlayButton:sender];
-    if (index != NSUIntegerMax) {
-        if (!_currentVideoPlayerViewController) {
-            [self playVideoAtIndex:index];
-        }
-    }
-}
-
-- (NSUInteger)indexForPlayButton:(UIView *)playButton {
+    UIButton *playButton = (UIButton *)sender;
     NSUInteger index = NSUIntegerMax;
     for (MWZoomingScrollView *page in _visiblePages) {
         if (page.playButton == playButton) {
@@ -1193,7 +1181,11 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
             break;
         }
     }
-    return index;
+    if (index != NSUIntegerMax) {
+        if (!_currentVideoPlayerViewController) {
+            [self playVideoAtIndex:index];
+        }
+    }
 }
 
 #pragma mark - Video
@@ -1203,26 +1195,19 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     if ([photo respondsToSelector:@selector(getVideoURL:)]) {
         
         // Valid for playing
-        [self clearCurrentVideo];
         _currentVideoIndex = index;
+        [self clearCurrentVideo];
         [self setVideoLoadingIndicatorVisible:YES atPageIndex:index];
         
         // Get video and play
-        typeof(self) __weak weakSelf = self;
         [photo getVideoURL:^(NSURL *url) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                // If the video is not playing anymore then bail
-                typeof(self) strongSelf = weakSelf;
-                if (!strongSelf) return;
-                if (strongSelf->_currentVideoIndex != index || !strongSelf->_viewIsActive) {
-                    return;
-                }
-                if (url) {
-                    [weakSelf _playVideo:url atPhotoIndex:index];
-                } else {
-                    [weakSelf setVideoLoadingIndicatorVisible:NO atPageIndex:index];
-                }
-            });
+            if (url) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self _playVideo:url atPhotoIndex:index];
+                });
+            } else {
+                [self setVideoLoadingIndicatorVisible:NO atPageIndex:index];
+            }
         }];
         
     }
@@ -1276,11 +1261,10 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
 }
 
 - (void)clearCurrentVideo {
-    [_currentVideoPlayerViewController.moviePlayer stop];
+    if (!_currentVideoPlayerViewController) return;
     [_currentVideoLoadingIndicator removeFromSuperview];
     _currentVideoPlayerViewController = nil;
     _currentVideoLoadingIndicator = nil;
-    [[self pageDisplayedAtIndex:_currentVideoIndex] playButton].hidden = NO;
     _currentVideoIndex = NSUIntegerMax;
 }
 
@@ -1288,14 +1272,12 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     if (_currentVideoLoadingIndicator && !visible) {
         [_currentVideoLoadingIndicator removeFromSuperview];
         _currentVideoLoadingIndicator = nil;
-        [[self pageDisplayedAtIndex:pageIndex] playButton].hidden = NO;
     } else if (!_currentVideoLoadingIndicator && visible) {
         _currentVideoLoadingIndicator = [[UIActivityIndicatorView alloc] initWithFrame:CGRectZero];
         [_currentVideoLoadingIndicator sizeToFit];
         [_currentVideoLoadingIndicator startAnimating];
         [_pagingScrollView addSubview:_currentVideoLoadingIndicator];
         [self positionVideoLoadingIndicator];
-        [[self pageDisplayedAtIndex:pageIndex] playButton].hidden = YES;
     }
 }
 
@@ -1316,11 +1298,17 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     
     if (_gridController) return;
     
-    // Clear video
-    [self clearCurrentVideo];
-    
     // Init grid controller
     _gridController = [[MWGridViewController alloc] init];
+    
+    //xxx
+    if (_gridBackgroundColor){
+        _gridController.collectionView.backgroundColor = _gridBackgroundColor;
+    } else {
+        _gridController.collectionView.backgroundColor = [UIColor blackColor];
+    }
+    
+    
     if (@available(iOS 11.0, *)) {
     } else {
         _gridController.initialContentOffset = _currentGridContentOffset;
@@ -1370,11 +1358,13 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     
     if (!_gridController) return;
     
+    // Remember previous content offset
     if (@available(iOS 11.0, *)) {
     } else {
         // Remember previous content offset
         _currentGridContentOffset = _gridController.collectionView.contentOffset;
     }
+    
     
     // Restore action button if it was removed
     if (_gridPreviousRightNavItem == _actionButton && _actionButton) {
@@ -1678,5 +1668,66 @@ static void * MWVideoPlayerObservation = &MWVideoPlayerObservation;
     }
     self.navigationController.navigationBar.userInteractionEnabled = YES;
 }
+
+
+// Customize Appearance
+UIColor *_navigationBarBackButtonTintColor;
+UIColor *_toolbarTintColor;
+UIColor *_backgroundColor;
+UIColor *_gridBackgroundColor;
+UIColor *_bottomBarColor;
+UIColor *_navigationBarTintColor;
+UIColor *_navigationBarTitleColor;
+
+UIImage *_toolbarBackgroundImage;
+UIImage *_navigationBarBackgroundImage;
+
+
+#pragma mark - Customize user interface
+- (void)changeGridBackgroundColor:(UIColor*)color
+{
+    _gridBackgroundColor = [color copy];
+}
+
+- (void)changeNavigationBarBackButtonTintColor:(UIColor *)color
+{
+    _navigationBarBackButtonTintColor = [color copy];
+}
+
+- (void)changeNavigationBarBackgroundImage:(UIImage *)image
+{
+    _navigationBarBackgroundImage = [image copy];
+}
+
+- (void)changeImageViewBackgroundColor:(UIColor *)color
+{
+    _backgroundColor = [color copy];
+}
+
+- (void)changeToolbarTintColor:(UIColor *)color
+{
+    _toolbarTintColor = [color copy];
+}
+
+- (void)changeToolbarBackgroundImage:(UIImage *)image
+{
+    _toolbarBackgroundImage = [image copy];
+}
+
+-(void)changeBottomBarColor:(UIColor*)color
+{
+    _bottomBarColor = [color copy];
+}
+
+- (void)changeNavigationBarTintColor:(UIColor*)color
+{
+    _navigationBarTintColor = [color copy];
+}
+
+- (void)changeNavigationBarTitleColor:(UIColor*)color
+{
+    _navigationBarTitleColor = [color copy];
+}
+
 
 @end
