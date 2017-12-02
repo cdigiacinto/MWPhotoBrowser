@@ -123,7 +123,7 @@
     } else {
         navBarBottom = navBar.frame.origin.y + navBar.frame.size.height;
     }
-    self.collectionView.contentInset = UIEdgeInsetsMake(navBar.frame.origin.y + navBar.frame.size.height + [self getGutter], 0, 0, 0);
+    self.collectionView.contentInset = UIEdgeInsetsMake(navBarBottom + [self getGutter], 0, 0, 0);
 }
 
 - (void)willAnimateRotationToInterfaceOrientation:(UIInterfaceOrientation)toInterfaceOrientation duration:(NSTimeInterval)duration {
